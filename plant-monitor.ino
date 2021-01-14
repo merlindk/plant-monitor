@@ -2,6 +2,8 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
+#include <SPI.h>
+#include <SD.h>
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -19,18 +21,24 @@ const int PUMP_SPEED = 10; //mL per second
 const long HOUR_TO_MILLI = 60 * 60 * 1000;
 const int DRY = 106;
 const int WET = 76;
+// change this to match your SD shield or module;
+const int chipSelect = 10;
+const int PERIOD = 1000;
+const int PERSISTANCE_FREQUENCY = 30;
 
-auto daily_timer = timer_create_default();
-auto watering_timer = timer_create_default();
 auto update_timer = timer_create_default();
+
+File myFile;
 
 long water_volume = 0;
 long frequency = 0;
-bool watering = false;
 long humidity = 0;
 bool menu = true;
 bool read_humidity = true;
 long light_level = 0;
+int data_timer = 0;
+long water_time = 0;
+long watering_time = frequency * HOUR_TO_MILLI;
 
 int air_humidity = 0;
 int air_temperature = 0;
@@ -42,18 +50,17 @@ void setup() {
   dht.begin();
   lcd.init();
   lcd.backlight();
-  
+  SD.begin();
+
   read_sensors();
 
-  daily_timer.in(frequency * HOUR_TO_MILLI, check_watering);
-  update_timer.every(1000, update_stuff);
+  update_timer.every(PERIOD, update_stuff);
 }
 
 void loop() {
-  daily_timer.tick();
-  watering_timer.tick();
   update_timer.tick();
 }
+
 
 bool update_stuff() {
   check_menu();
@@ -66,7 +73,30 @@ bool update_stuff() {
     print_menu_2();
     print_values_2();
   }
+  if (data_timer >= PERSISTANCE_FREQUENCY) {
+    data_timer = 0;
+    write_to_sd();
+  }
+  data_timer = data_timer + 1;
+  if (water_time > 0) {
+    water_time = water_time - PERIOD;
+    if (water_time <= 0) {
+      digitalWrite(MOTOR_PIN, false);
+    }
+  }
+  watering_time = watering_time - PERIOD;
+  if (watering_time <= 0) {
+    check_watering();
+  }
   return true;
+}
+
+void write_to_sd() {
+  myFile = SD.open("data.csv", FILE_WRITE);
+  String to_write = "";
+  to_write = to_write + humidity + ";" + air_humidity + ";" + air_temperature + ";" + light_level + ";" + water_time;
+  myFile.println(to_write);
+  myFile.close();
 }
 
 void check_menu() {
@@ -85,9 +115,9 @@ void read_sensors() {
   light_level = analogRead(LIGHT_PIN);
 }
 
-int get_humidity_percentage(int sensor_reading){
-    return (2.5 * abs(sensor_reading)) - 88.5;
-  }
+int get_humidity_percentage(int sensor_reading) {
+  return (2.5 * abs(sensor_reading)) - 88.5;
+}
 
 void read_dht() {
   int bair_humidity = 0;
@@ -157,7 +187,7 @@ void print_values_1() {
   lcd.print(frequency_message);
 
   lcd.setCursor(1, 1);
-  if (watering) {
+  if (water_time > 0) {
     lcd.print("Y");
   } else {
     lcd.print("N");
@@ -187,18 +217,10 @@ void print_values_2() {
 
 }
 
-void stop_watering() {
-  digitalWrite(MOTOR_PIN, false);
-  watering = false;
-}
-
 void check_watering() {
-  if (!watering &&  (humidity < 50)) {
-    watering = true;
+  watering_time = frequency * HOUR_TO_MILLI;
+  if (water_time <= 0 &&  (humidity < 50)) {
     digitalWrite(MOTOR_PIN, true);
-    long water_time = (water_volume / PUMP_SPEED) * 1000;
-    watering_timer.in(water_time, stop_watering);
+    water_time = (water_volume / PUMP_SPEED) * 1000;
   }
-
-  daily_timer.in(frequency * HOUR_TO_MILLI, check_watering);
 }
