@@ -18,7 +18,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT dht(DHTPIN, DHTTYPE);
 
 const int PUMP_SPEED = 10; //mL per second
-const long HOUR_TO_MILLI = 60 * 60 * 1000;
+const long HOUR_TO_MILLI = 3600000;
 const int DRY = 106;
 const int WET = 76;
 // change this to match your SD shield or module;
@@ -45,6 +45,7 @@ int air_temperature = 0;
 
 
 void setup() {
+  Serial.begin(9600);
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(MENU_BUTTON, INPUT);
   dht.begin();
@@ -88,13 +89,14 @@ bool update_stuff() {
   if (watering_time <= 0) {
     check_watering();
   }
+
   return true;
 }
 
 void write_to_sd() {
-  myFile = SD.open("data.csv", FILE_WRITE);
+  myFile = SD.open("data2.csv", FILE_WRITE);
   String to_write = "";
-  to_write = to_write + humidity + ";" + air_humidity + ";" + air_temperature + ";" + light_level + ";" + water_time;
+  to_write = to_write + humidity + ";" + air_humidity + ";" + air_temperature + ";" + light_level + ";" + water_time + ";" + watering_time;
   myFile.println(to_write);
   myFile.close();
 }
@@ -219,7 +221,7 @@ void print_values_2() {
 
 void check_watering() {
   watering_time = frequency * HOUR_TO_MILLI;
-  if (water_time <= 0 &&  (humidity < 50)) {
+  if (water_time <= 0 &&  (humidity < 60)) {
     digitalWrite(MOTOR_PIN, true);
     water_time = (water_volume / PUMP_SPEED) * 1000;
   }
