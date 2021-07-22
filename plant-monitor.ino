@@ -52,14 +52,66 @@ void setup() {
   lcd.init();
   lcd.backlight();
   SD.begin();
-
+  read_configs();
   read_sensors();
-
+  Serial.println("Started");
   update_timer.every(PERIOD, update_stuff);
 }
 
 void loop() {
   update_timer.tick();
+}
+
+void read_configs() {
+  myFile = SD.open("monitor.cfg");
+  if (myFile) {
+    Serial.println("Found file");
+    char buffer[40]; // May need to be a bit bigger if you have long names
+    byte index = 0;
+    while (myFile.available())
+    {
+      char c = myFile.read();
+
+      if (c == '\n' || c == '\r') // Test for <cr> and <lf>
+      {
+        parseAndSave(buffer);
+        index = 0;
+        buffer[index] = '\0'; // Keep buffer NULL terminated
+      }
+      else
+      {
+        buffer[index++] = c;
+        buffer[index] = '\0'; // Keep buffer NULL terminated
+      }
+    }
+  }
+}
+
+void parseAndSave(char *buff)
+{
+  char *name = strtok(buff, " =");
+  if (name)
+  {
+    char *junk = strtok(NULL, " ");
+    if (junk)
+    {
+      char *valu = strtok(NULL, " ");
+      if (valu)
+      {
+        int val = atoi(valu);
+        if (strcmp(name, "volumen") == 0)
+        {
+          Serial.println(val);
+          water_volume = val;
+        }
+        else if (strcmp(name, "frequency") == 0)
+        {
+          Serial.println(val);
+          frequency = val;
+        }
+      }
+    }
+  }
 }
 
 
@@ -94,7 +146,7 @@ bool update_stuff() {
 }
 
 void write_to_sd() {
-  myFile = SD.open("data2.csv", FILE_WRITE);
+  myFile = SD.open("test.txt", FILE_WRITE);
   String to_write = "";
   to_write = to_write + humidity + ";" + air_humidity + ";" + air_temperature + ";" + light_level + ";" + water_time + ";" + watering_time;
   myFile.println(to_write);
@@ -110,8 +162,6 @@ void check_menu() {
 }
 
 void read_sensors() {
-  water_volume = analogRead(VOL_POT_PIN);
-  frequency = (analogRead(DAY_POT_PIN) / 41); //100 /41 = 24 to turn 1 to 100 range into 1 to 24 range
   humidity = map(analogRead(HUMIDITY_SENSOR), 600, 235, 0, 100);//get_humidity_percentage(100 - (analogRead(HUMIDITY_SENSOR) / 10));
   read_dht();
   light_level = analogRead(LIGHT_PIN);
@@ -221,7 +271,7 @@ void print_values_2() {
 
 void check_watering() {
   watering_time = frequency * HOUR_TO_MILLI;
-  if (water_time <= 0 &&  (humidity < 60)) {
+  if (water_time <= 0 &&  (humidity < 9999)) {
     digitalWrite(MOTOR_PIN, true);
     water_time = (water_volume / PUMP_SPEED) * 1000;
   }
